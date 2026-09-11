@@ -85,7 +85,7 @@ function popupHTML(s) {
   if (loc) out += `<p><strong>Location:</strong> ${esc(loc)}</p>`;
   if (s.diocese) out += `<p><strong>Diocese:</strong> ${esc(s.diocese)}</p>`;
   if (s.partner) out += `<p><strong>Partner:</strong> ${esc(s.partner)}</p>`;
-  if (s.programs.length) {
+  if (s.programs.length) {if (s.url) out += `<p style="margin-top:10px;"><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer"><strong>Learn more →</strong></a></p>`;
     out += `<div class="tags">${s.programs.map(p=>`<span class="tag">${esc(p)}</span>`).join('')}</div>`;
   }
   return out + `</div>`;
@@ -190,6 +190,7 @@ async function loadSites() {
         site: get(r,'Site Name'),
         diocese: get(r,'Diocese'),
         partner: get(r,'Partners'),
+       url: get(r,'URL'),does
         programs: get(r,'Program Areas').split(';').map(x=>x.trim()).filter(Boolean),
         lat, lon
       };
