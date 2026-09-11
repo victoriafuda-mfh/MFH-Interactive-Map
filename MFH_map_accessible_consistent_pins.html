@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Medicines for Humanity — Live Interactive Project Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Arial, Helvetica, sans-serif; color:#24323d; background:#f7f8f7; }
+  .wrap { max-width: 1400px; margin:auto; padding:24px; }
+  h1 { margin:0 0 6px; font-size:30px; line-height:1.15; }
+  .sub { margin:0 0 18px; color:#5c6870; }
+  .controls { background:white; border:1px solid #dfe4e2; border-radius:12px; padding:14px 16px; margin-bottom:14px; }
+  .controls strong { display:block; margin-bottom:10px; }
+  .filters { display:flex; flex-wrap:wrap; gap:8px; }
+  .filter {
+    border:2px solid #7d8985; background:white; border-radius:999px; padding:10px 14px;
+    cursor:pointer; font-size:16px; font-weight:600; min-height:44px; color:#24323d;
+  }
+  .filter:hover { box-shadow:0 0 0 2px rgba(36,50,61,.08); }
+  .filter.active { color:white; }
+  .filter.active::before { content:"✓ "; font-weight:700; }
+  .filter-all.active { background:#24323d; border-color:#24323d; }
+  .filter-clinical { border-color:#1f5a94; }
+  .filter-clinical.active { background:#1f5a94; border-color:#1f5a94; }
+  .filter-community { border-color:#087f75; }
+  .filter-community.active { background:#087f75; border-color:#087f75; }
+  .filter-nutrition { border-color:#b75b00; }
+  .filter-nutrition.active { background:#b75b00; border-color:#b75b00; }
+  .filter-capacity { border-color:#72509a; }
+  .filter-capacity.active { background:#72509a; border-color:#72509a; }
+  .filter-wash { border-color:#087ea4; }
+  .filter-wash.active { background:#087ea4; border-color:#087ea4; }
+  .filter-emergency { border-color:#9a3543; }
+  .filter-emergency.active { background:#9a3543; border-color:#9a3543; }
+  .meta { margin-top:10px; font-size:13px; color:#66727a; }
+  #map { height:70vh; min-height:520px; border:1px solid #dfe4e2; border-radius:12px; overflow:hidden; background:#e8ecea; }
+  .popup h3 { margin:0 0 7px; font-size:17px; }
+  .popup .project { font-weight:600; margin-bottom:7px; }
+  .popup p { margin:4px 0; line-height:1.35; }
+  .tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:8px; }
+  .tag { border-radius:999px; padding:4px 8px; font-size:12px; font-weight:600; border:1px solid currentColor; }
+  .tag-clinical { color:#17466f; background:#eaf2fa; }
+  .tag-community { color:#06655d; background:#e7f5f2; }
+  .tag-nutrition { color:#874400; background:#fff1df; }
+  .tag-capacity { color:#573c76; background:#f1ebf7; }
+  .tag-wash { color:#08627e; background:#e6f4f8; }
+  .tag-emergency { color:#762835; background:#f9e9ec; }
+  .note { font-size:12px; color:#78838a; margin-top:10px; }
+
+  .map-layout { display:grid; grid-template-columns:320px 1fr; gap:14px; align-items:stretch; }
+  .site-panel {
+    background:white; border:1px solid #dfe4e2; border-radius:12px; overflow:hidden;
+    min-height:520px; height:70vh; display:flex; flex-direction:column;
+  }
+  .site-panel-header { padding:14px 16px 10px; border-bottom:1px solid #e6eae8; }
+  .site-panel-header strong { display:block; margin-bottom:3px; }
+  .site-panel-count { font-size:12px; color:#78838a; }
+  .site-list { overflow:auto; padding:6px 0 12px; }
+  .country-group { border-bottom:1px solid #eef1f0; }
+  .country-toggle {
+    width:100%; border:0; background:white; padding:11px 14px; text-align:left;
+    font-weight:700; cursor:pointer; display:flex; justify-content:space-between; align-items:center;
+    color:#24323d; font-size:16px;
+  }
+  .country-toggle:hover { background:#f7f8f7; }
+  .country-sites { padding:0 8px 8px; }
+  .country-sites.collapsed { display:none; }
+  .site-item {
+    display:block; width:100%; border:0; background:transparent; text-align:left;
+    padding:10px 10px; border-radius:8px; cursor:pointer; color:#34444f; font-size:15px; min-height:44px;
+  }
+  .site-item:hover { background:#eef1f0; }
+  .site-item .site-name { display:block; font-weight:600; }
+  .site-item .site-meta { display:block; margin-top:2px; color:#78838a; font-size:11px; line-height:1.25; }
+  .mobile-site-toggle {
+    display:none; width:100%; margin-bottom:10px; border:1px solid #aeb8b5; background:white;
+    border-radius:10px; padding:10px 12px; font-weight:700; cursor:pointer; color:#24323d;
+  }
+  @media (max-width:700px) {
+    .wrap { padding:12px; }
+    h1 { font-size:24px; }
+    .map-layout { display:block; }
+    .mobile-site-toggle { display:block; }
+    .site-panel { display:none; height:46vh; min-height:300px; margin-bottom:10px; }
+    .site-panel.open { display:flex; }
+    #map { height:68vh; min-height:430px; }
+    .filter { font-size:13px; padding:7px 10px; }
+  }
+
+  /* Consistent cluster styling: numbered circle = multiple MFH sites */
+  .marker-cluster-small,
+  .marker-cluster-medium,
+  .marker-cluster-large {
+    background: rgba(36, 50, 61, 0.22) !important;
+  }
+  .marker-cluster-small div,
+  .marker-cluster-medium div,
+  .marker-cluster-large div {
+    background: #24323d !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+  }
+
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Explore Our Work</h1>
+  <p class="sub"><strong>How to use this map:</strong> Click a site on the map or choose a location from the list. Use the program buttons to narrow your results.</p>
+
+  <div class="controls">
+    <strong>Filter by Program Area</strong>
+    <div class="filters" id="filters"></div>
+    <div class="meta"><span id="count"></span><br>Choose one or more program areas. Selecting more than one will show sites that offer all selected programs.</div>
+  </div>
+
+  <button class="mobile-site-toggle" id="mobileSiteToggle">View Project Sites</button>
+
+  <div class="map-layout">
+    <aside class="site-panel" id="sitePanel">
+      <div class="site-panel-header">
+        <strong>Project Sites</strong>
+        <div class="site-panel-count" id="siteListCount"></div>
+      </div>
+      <div class="site-list" id="siteList"></div>
+    </aside>
+
+    <div id="map"></div>
+  </div>
+
+  <div class="note">Live prototype connected to the MFH Google Sheet. Edit the Sheet, then refresh this map to see updates. Sites without usable coordinates are not plotted.</div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+const DATA_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRwKc6ORoNzSXplP6LR770bOJdzBch_dzuMEiDlIi4uz3fYbpIXuDCLwSZ7u1o5jA/pub?gid=1363984869&single=true&output=csv';
+let sites = [];
+const programOrder = ["Clinical Services", "Community-Based Services", "Nutrition", "Capacity Building", "Water, Sanitation & Hygiene", "Emergency Response"];
+const selected = new Set();
+
+const map = L.map('map', { scrollWheelZoom:true });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+const cluster = L.markerClusterGroup({
+  showCoverageOnHover:false,
+  spiderfyOnMaxZoom:true,
+  disableClusteringAtZoom:13
+});
+map.addLayer(cluster);
+
+const siteIcon = L.divIcon({
+  className: '',
+  html: '<div style="width:20px;height:20px;background:#24323d;border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 1px 4px rgba(0,0,0,.35);"></div>',
+  iconSize:[24,24],
+  iconAnchor:[12,24],
+  popupAnchor:[0,-22]
+});
+
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function popupHTML(s) {
+  const loc = [s.region, s.area].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' • ');
+  let out = `<div class="popup"><h3>${esc(s.site)}</h3>`;
+  if (s.project && s.project !== s.site) out += `<div class="project">${esc(s.project)}</div>`;
+  if (s.country) out += `<p><strong>Country:</strong> ${esc(s.country)}</p>`;
+  if (loc) out += `<p><strong>Location:</strong> ${esc(loc)}</p>`;
+  if (s.diocese) out += `<p><strong>Diocese:</strong> ${esc(s.diocese)}</p>`;
+  if (s.partner) out += `<p><strong>Partner:</strong> ${esc(s.partner)}</p>`;
+  if (s.programs.length) {
+    const tagClass = p => ({
+      "Clinical Services":"tag-clinical",
+      "Community-Based Services":"tag-community",
+      "Nutrition":"tag-nutrition",
+      "Capacity Building":"tag-capacity",
+      "Water, Sanitation & Hygiene":"tag-wash",
+      "Emergency Response":"tag-emergency"
+    }[p] || '');
+    out += `<div class="tags">${s.programs.map(p=>`<span class="tag ${tagClass(p)}">${esc(p)}</span>`).join('')}</div>`;
+  }
+  if (s.url) {
+    out += `<p style="margin-top:10px;"><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer"><strong>Learn more →</strong></a></p>`;
+  }
+  return out + `</div>`;
+}
+
+function matches(s) {
+  if (selected.size === 0) return true;
+  return [...selected].every(p => s.programs.includes(p));
+}
+
+function openSite(s) {
+  map.setView([s.lat, s.lon], Math.max(map.getZoom(), 11), {animate:true});
+  if (s.marker) {
+    cluster.zoomToShowLayer(s.marker, () => s.marker.openPopup());
+  }
+  if (window.innerWidth <= 700) {
+    document.getElementById('sitePanel').classList.remove('open');
+    document.getElementById('mobileSiteToggle').textContent = 'View Project Sites';
+  }
+}
+
+function renderSiteList(visible) {
+  const list = document.getElementById('siteList');
+  const count = document.getElementById('siteListCount');
+
+  const uniqueMap = new Map();
+  visible.forEach(s => {
+    const key = `${(s.country || '').trim().toLowerCase()}||${(s.site || '').trim().toLowerCase()}`;
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, {
+        country: s.country || 'Other',
+        site: s.site,
+        region: s.region,
+        area: s.area,
+        records: [s]
+      });
+    } else {
+      const u = uniqueMap.get(key);
+      u.records.push(s);
+      if (!u.region && s.region) u.region = s.region;
+      if (!u.area && s.area) u.area = s.area;
+    }
+  });
+
+  const uniqueSites = [...uniqueMap.values()];
+  count.textContent = `${uniqueSites.length} unique site${uniqueSites.length===1?'':'s'} shown`;
+
+  const byCountry = {};
+  uniqueSites
+    .slice()
+    .sort((a,b) => (a.country || '').localeCompare(b.country || '') || (a.site || '').localeCompare(b.site || ''))
+    .forEach(s => {
+      (byCountry[s.country] ||= []).push(s);
+    });
+
+  list.innerHTML = '';
+
+  Object.keys(byCountry).sort().forEach(country => {
+    const group = document.createElement('div');
+    group.className = 'country-group';
+
+    const toggle = document.createElement('button');
+    toggle.className = 'country-toggle';
+    toggle.innerHTML = `<span>${esc(country)}</span><span>${byCountry[country].length} ▾</span>`;
+
+    const sitesWrap = document.createElement('div');
+    sitesWrap.className = 'country-sites';
+
+    toggle.onclick = () => {
+      const collapsed = sitesWrap.classList.toggle('collapsed');
+      toggle.lastElementChild.textContent = `${byCountry[country].length} ${collapsed ? '▸' : '▾'}`;
+    };
+
+    byCountry[country].forEach(u => {
+      const item = document.createElement('button');
+      item.className = 'site-item';
+
+      const locParts = [u.region, u.area]
+        .filter(Boolean)
+        .filter((v,i,a) => a.indexOf(v) === i);
+      const locationLine = locParts.length
+        ? `<span class="site-meta">${esc(locParts.join(' • '))}</span>` : '';
+
+      item.innerHTML = `<span class="site-name">${esc(u.site)}</span>${locationLine}`;
+      item.onclick = () => openSite(u.records[0]);
+      sitesWrap.appendChild(item);
+    });
+
+    group.appendChild(toggle);
+    group.appendChild(sitesWrap);
+    list.appendChild(group);
+  });
+}
+function renderMarkers(fit=false) {
+  cluster.clearLayers();
+  const visible = sites.filter(matches);
+
+  visible.forEach(s => {
+    if (!s.marker) {
+      s.marker = L.marker([s.lat, s.lon], {icon:siteIcon}).bindPopup(popupHTML(s), {maxWidth:340});
+    } else {
+      s.marker.setPopupContent(popupHTML(s));
+    }
+  });
+
+  cluster.addLayers(visible.map(s => s.marker));
+  document.getElementById('count').textContent = `${visible.length} site${visible.length===1?'':'s'} shown`;
+  renderSiteList(visible);
+
+  if (fit && visible.length) {
+    const bounds = L.latLngBounds(visible.map(s => [s.lat,s.lon]));
+    map.fitBounds(bounds.pad(0.12), {maxZoom:7});
+  }
+}
+
+const filters = document.getElementById('filters');
+const allBtn = document.createElement('button');
+allBtn.className = 'filter filter-all active';
+allBtn.textContent = 'Show All Sites';
+allBtn.onclick = () => {
+  selected.clear();
+  [...filters.querySelectorAll('.filter')].forEach(b=>b.classList.remove('active'));
+  allBtn.classList.add('active');
+  renderMarkers(true);
+};
+filters.appendChild(allBtn);
+
+programOrder.forEach(program => {
+  const b = document.createElement('button');
+  const programClass = {
+    "Clinical Services":"filter-clinical",
+    "Community-Based Services":"filter-community",
+    "Nutrition":"filter-nutrition",
+    "Capacity Building":"filter-capacity",
+    "Water, Sanitation & Hygiene":"filter-wash",
+    "Emergency Response":"filter-emergency"
+  }[program] || '';
+  b.className = `filter ${programClass}`;
+  b.textContent = program;
+  b.onclick = () => {
+    allBtn.classList.remove('active');
+    if (selected.has(program)) {
+      selected.delete(program);
+      b.classList.remove('active');
+    } else {
+      selected.add(program);
+      b.classList.add('active');
+    }
+    if (selected.size === 0) allBtn.classList.add('active');
+    renderMarkers(true);
+  };
+  filters.appendChild(b);
+});
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i+1] === '"') { field += '"'; i++; }
+      else if (c === '"') quoted = false;
+      else field += c;
+    } else {
+      if (c === '"') quoted = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else if (c !== '\r') field += c;
+    }
+  }
+  if (field.length || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
+function normalizeHeader(h) {
+  return String(h || '').trim().toLowerCase().replace(/\s+/g,' ');
+}
+
+async function loadSites() {
+  const count = document.getElementById('count');
+  count.textContent = 'Loading live map data…';
+
+  try {
+    const response = await fetch(DATA_URL, {cache:'no-store'});
+    if (!response.ok) throw new Error('Could not load Google Sheet');
+
+    const csv = await response.text();
+    const rows = parseCSV(csv);
+    if (rows.length < 2) throw new Error('No map rows found');
+
+    const headers = rows[0].map(normalizeHeader);
+    const col = name => headers.indexOf(normalizeHeader(name));
+    const get = (r, name) => {
+      const i = col(name);
+      return i >= 0 ? String(r[i] ?? '').trim() : '';
+    };
+
+    sites = rows.slice(1).map(r => {
+      const lat = parseFloat(get(r,'Latitude'));
+      const lon = parseFloat(get(r,'Longitude'));
+
+      return {
+        project: get(r,'Project Title'),
+        country: get(r,'Country'),
+        region: get(r,'Region'),
+        area: get(r,'Area'),
+        site: get(r,'Site Name'),
+        diocese: get(r,'Diocese'),
+        partner: get(r,'Partners'),
+        url: get(r,'URL'),
+        programs: get(r,'Program Areas').split(';').map(x=>x.trim()).filter(Boolean),
+        lat,
+        lon
+      };
+    }).filter(s => s.site && Number.isFinite(s.lat) && Number.isFinite(s.lon));
+
+    renderMarkers(true);
+  } catch (err) {
+    console.error(err);
+    count.textContent = 'Map data could not be loaded. Check that the Google Sheet is still published as CSV.';
+  }
+}
+
+const mobileSiteToggle = document.getElementById('mobileSiteToggle');
+mobileSiteToggle.onclick = () => {
+  const panel = document.getElementById('sitePanel');
+  const open = panel.classList.toggle('open');
+  mobileSiteToggle.textContent = open ? 'Hide Project Sites' : 'View Project Sites';
+};
+
+loadSites();
+</script>
+</body>
+</html>
